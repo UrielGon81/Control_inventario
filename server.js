@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
@@ -15,6 +17,30 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
+});
+
+// Importación automática del respaldo SQL al arrancar en la nube
+pool.getConnection((err, connection) => {
+    if (err) {
+        console.log("Error al conectar a la BD para el respaldo:", err.message);
+        return;
+    }
+    
+    const sqlFilePath = path.join(__dirname, 'backup.sql');
+    if (fs.existsSync(sqlFilePath)) {
+        const sqlQuery = fs.readFileSync(sqlFilePath, 'utf8');
+        connection.query(sqlQuery, (error, results) => {
+            connection.release();
+            if (error) {
+                console.log("Aviso en el respaldo (las tablas ya debían existir):", error.message);
+            } else {
+                console.log("¡Base de datos importada exitosamente en la nube!");
+            }
+        });
+    } else {
+        connection.release();
+        console.log("No se encontró el archivo backup.sql, continuando normalmente...");
+    }
 });
 
 app.post('/api/login', (req, res) => {

@@ -180,7 +180,7 @@ app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.send('¡Hola! El servidor de inventario está conectado y vivo 🚀');
 });
 
 const PORT = process.env.PORT || 3000;

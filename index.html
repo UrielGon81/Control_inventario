@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Inventario & Ventas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 antialiased min-h-screen">
+
+    <!-- LOGIN -->
+    <div id="loginModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full space-y-6">
+            <h2 class="text-xl font-semibold text-slate-900">Acceso Privado</h2>
+            <form id="loginForm" class="space-y-4">
+                <input type="password" id="adminPassword" placeholder="Contraseña secreta" class="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900" required>
+                <button type="submit" class="w-full bg-slate-900 text-white font-medium py-2.5 rounded-xl hover:bg-slate-800 text-sm">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- APP -->
+    <div id="appContainer" class="max-w-6xl mx-auto px-4 py-8 space-y-8 hidden">
+        
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900">Control de Negocio</h1>
+                <p class="text-slate-500 text-xs mt-0.5">Gestión de stock, historial y cortes semanales automáticos.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                    <button onclick="cambiarTab('inventario')" id="tabInventario" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition">Inventario</button>
+                    <button onclick="cambiarTab('ventas')" id="tabVentas" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Ventas Detalladas</button>
+                    <button onclick="cambiarTab('corte')" id="tabCorte" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Cortes Semanales</button>
+                </div>
+                <button onclick="cerrarSesion()" class="text-xs text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-xl border border-rose-100 font-medium">Salir</button>
+            </div>
+        </header>
+
+        <!-- INVENTARIO -->
+        <div id="seccionInventario" class="space-y-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
+                <h2 class="text-sm font-semibold text-slate-900 uppercase">Nuevo Producto</h2>
+                <form id="productForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+                    <input type="text" id="nombre" placeholder="Nombre" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                    <input type="text" id="talla" placeholder="Talla Base" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                    <input type="number" step="0.01" id="precio_compra" placeholder="Costo real ($)" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                    <input type="number" step="0.01" id="precio_venta" placeholder="Precio venta ($)" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                    <input type="number" id="stock_actual" placeholder="Stock" class="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                    <button type="submit" class="bg-slate-900 text-white font-medium py-2 rounded-xl hover:bg-slate-800 text-sm">Guardar</button>
+                </form>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-100 text-slate-400 font-medium text-xs">
+                                <th class="pb-3 px-3">Producto</th>
+                                <th class="pb-3 px-3">Talla Base</th>
+                                <th class="pb-3 px-3">Costo</th>
+                                <th class="pb-3 px-3">Venta</th>
+                                <th class="pb-3 px-3">Ganancia Unit.</th>
+                                <th class="pb-3 px-3">Stock</th>
+                                <th class="pb-3 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody" class="divide-y divide-slate-50 text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VENTAS INDIVIDUALES -->
+        <div id="seccionVentas" class="space-y-6 hidden">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-100 text-slate-400 font-medium text-xs">
+                                <th class="pb-3 px-3">Fecha Exacta</th>
+                                <th class="pb-3 px-3">Producto / Talla</th>
+                                <th class="pb-3 px-3">Cant.</th>
+                                <th class="pb-3 px-3">Total / Pagado</th>
+                                <th class="pb-3 px-3">Pendiente</th>
+                                <th class="pb-3 px-3">Estado</th>
+                                <th class="pb-3 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ventasTableBody" class="divide-y divide-slate-50 text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CORTES SEMANALES -->
+        <div id="seccionCorte" class="space-y-6 hidden">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-4">
+                <h2 class="text-sm font-semibold text-slate-900 uppercase">Historial de Cortes por Semana</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-100 text-slate-400 font-medium text-xs">
+                                <th class="pb-3 px-3">Semana (Lunes a Domingo)</th>
+                                <th class="pb-3 px-3">Total Vendido</th>
+                                <th class="pb-3 px-3 text-emerald-600">Dinero en Caja (Abonos)</th>
+                                <th class="pb-3 px-3 text-rose-600">Faltante por Cobrar</th>
+                                <th class="pb-3 px-3 text-right text-blue-600">Ganancia Neta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cortesTableBody" class="divide-y divide-slate-50 text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL VENTA -->
+    <div id="modalVenta" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-100 max-w-lg w-full space-y-4">
+            <h3 class="text-lg font-bold text-slate-900">Registrar Venta</h3>
+            <p id="infoProductoModal" class="text-xs text-slate-500"></p>
+            
+            <form id="formVentaModal" class="space-y-4">
+                <input type="hidden" id="modalProductoId">
+                
+                <div>
+                    <label class="text-xs font-medium text-slate-600">Fecha de la venta:</label>
+                    <input type="datetime-local" id="modalFecha" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-semibold text-slate-700 uppercase">Tallas y Cantidades:</label>
+                        <button type="button" onclick="agregarLineaTalla()" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700">+ Agregar talla</button>
+                    </div>
+                    <div id="contenedorTallas" class="space-y-2 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-600">¿Cuánto pagó en este momento? ($):</label>
+                    <input type="number" step="0.01" id="modalPagado" placeholder="Abono o Total" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none" required>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="cerrarModalVenta()" class="w-1/2 bg-slate-100 text-slate-700 py-2 rounded-xl text-sm font-medium">Cancelar</button>
+                    <button type="submit" class="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-medium">Guardar Venta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('token_admin');
+            if (token) {
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('appContainer').classList.remove('hidden');
+                cargarProductos();
+            }
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('adminPassword').value;
+            const res = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+            const data = await res.json();
+            if (data.success) {
+                localStorage.setItem('token_admin', password);
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('appContainer').classList.remove('hidden');
+                cargarProductos();
+            } else { alert(data.error); }
+        });
+
+        function cerrarSesion() { localStorage.removeItem('token_admin'); location.reload(); }
+
+        function cambiarTab(tab) {
+            document.getElementById('seccionInventario').classList.add('hidden');
+            document.getElementById('seccionVentas').classList.add('hidden');
+            document.getElementById('seccionCorte').classList.add('hidden');
+            
+            document.getElementById('tabInventario').className = "px-3 py-1.5 rounded-lg text-slate-600 transition";
+            document.getElementById('tabVentas').className = "px-3 py-1.5 rounded-lg text-slate-600 transition";
+            document.getElementById('tabCorte').className = "px-3 py-1.5 rounded-lg text-slate-600 transition";
+
+            if (tab === 'inventario') {
+                document.getElementById('tabInventario').className = "px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition";
+                document.getElementById('seccionInventario').classList.remove('hidden');
+                cargarProductos();
+            } else if (tab === 'ventas') {
+                document.getElementById('tabVentas').className = "px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition";
+                document.getElementById('seccionVentas').classList.remove('hidden');
+                cargarHistorialVentas();
+            } else if (tab === 'corte') {
+                document.getElementById('tabCorte').className = "px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition";
+                document.getElementById('seccionCorte').classList.remove('hidden');
+                cargarHistorialSemanas();
+            }
+        }
+
+        async function cargarProductos() {
+            const token = localStorage.getItem('token_admin');
+            const res = await fetch(`${API_URL}/productos`, { headers: { 'Authorization': token } });
+            const productos = await res.json();
+            const tbody = document.getElementById('productTableBody');
+            tbody.innerHTML = '';
+            productos.forEach(p => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="py-3 px-3 font-medium text-slate-900">${p.nombre}</td>
+                        <td class="py-3 px-3"><span class="bg-slate-100 text-xs px-2 py-0.5 rounded-md">${p.talla}</span></td>
+                        <td class="py-3 px-3 text-slate-500">$${Number(p.precio_compra).toFixed(2)}</td>
+                        <td class="py-3 px-3 font-medium">$${Number(p.precio_venta).toFixed(2)}</td>
+                        <td class="py-3 px-3 font-semibold text-emerald-600">+$${Number(p.ganancia_unitaria).toFixed(2)}</td>
+                        <td class="py-3 px-3 font-bold">${p.stock_actual}</td>
+                        <td class="py-3 px-3 text-right">
+                            <button onclick="abrirModalVenta(${p.id}, '${p.nombre}', '${p.talla}')" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg">Vender</button>
+                        </td>
+                    </tr>`;
+            });
+        }
+
+        function abrirModalVenta(id, nombre, tallaBase) {
+            document.getElementById('modalProductoId').value = id;
+            document.getElementById('infoProductoModal').innerText = `Producto: ${nombre}`;
+            document.getElementById('contenedorTallas').innerHTML = '';
+            agregarLineaTalla(tallaBase, 1);
+
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('modalFecha').value = now.toISOString().slice(0,16);
+            document.getElementById('modalVenta').classList.remove('hidden');
+        }
+
+        function agregarLineaTalla(tallaDefault = '', cantidadDefault = 1) {
+            const contenedor = document.getElementById('contenedorTallas');
+            const div = document.createElement('div');
+            div.className = "flex gap-2 items-center";
+            div.innerHTML = `
+                <input type="text" placeholder="Talla (ej. XS)" value="${tallaDefault}" class="input-talla w-2/3 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-sm outline-none" required>
+                <input type="number" placeholder="Cant" min="1" value="${cantidadDefault}" class="input-cant w-1/3 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-sm outline-none" required>
+                <button type="button" onclick="this.parentElement.remove()" class="text-rose-500 p-1.5 font-bold">✕</button>
+            `;
+            contenedor.appendChild(div);
+        }
+
+        function cerrarModalVenta() { document.getElementById('modalVenta').classList.add('hidden'); }
+
+        document.getElementById('formVentaModal').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = localStorage.getItem('token_admin');
+            
+            const filasTallas = document.querySelectorAll('#contenedorTallas > div');
+            let itemsArray = [];
+            filasTallas.forEach(fila => {
+                const talla = fila.querySelector('.input-talla').value.trim();
+                const cantidad = parseInt(fila.querySelector('.input-cant').value);
+                if (talla && cantidad > 0) itemsArray.push({ talla, cantidad });
+            });
+
+            if (itemsArray.length === 0) return alert("Agrega al menos una talla");
+
+            const data = {
+                producto_id: document.getElementById('modalProductoId').value,
+                items: itemsArray,
+                monto_pagado: parseFloat(document.getElementById('modalPagado').value) || 0,
+                fecha_venta: document.getElementById('modalFecha').value
+            };
+
+            const res = await fetch(`${API_URL}/ventas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify(data) });
+            const resultado = await res.json();
+
+            if (res.ok) {
+                cerrarModalVenta();
+                cargarProductos();
+            } else { alert("Error: " + (resultado.error || "No se guardó")); }
+        });
+
+        async function cargarHistorialVentas() {
+            const token = localStorage.getItem('token_admin');
+            const res = await fetch(`${API_URL}/ventas-historial`, { headers: { 'Authorization': token } });
+            const ventas = await res.json();
+            const tbody = document.getElementById('ventasTableBody');
+            tbody.innerHTML = '';
+            ventas.forEach(v => {
+                const fecha = new Date(v.fecha_venta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+                const estadoBadge = v.monto_pendiente > 0 
+                    ? `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-md">Debe $${v.monto_pendiente}</span>` 
+                    : `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-md">Liquidado</span>`;
+                
+                const boton = v.monto_pendiente > 0 ? `<button onclick="liquidarVenta(${v.id})" class="bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-lg">Liquidar</button>` : '';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="py-3 px-3 text-slate-500 text-xs">${fecha}</td>
+                        <td class="py-3 px-3 font-medium">${v.nombre} <span class="text-xs bg-slate-100 px-1 py-0.5 rounded">(${v.talla_vendida})</span></td>
+                        <td class="py-3 px-3">${v.cantidad_vendida} pza</td>
+                        <td class="py-3 px-3">$${v.precio_total_venta} <span class="text-emerald-600">(Pag: $${v.monto_pagado})</span></td>
+                        <td class="py-3 px-3">${estadoBadge}</td>
+                        <td class="py-3 px-3 text-right">${boton}</td>
+                    </tr>`;
+            });
+        }
+
+        // Función para formatear "YYYY-MM-DD" a "lun, 1 de nov"
+        function formatearFechaTexto(fechaStr) {
+            const partes = fechaStr.split('-');
+            const fecha = new Date(partes[0], partes[1] - 1, partes[2]);
+            return fecha.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
+        }
+
+        async function cargarHistorialSemanas() {
+            const token = localStorage.getItem('token_admin');
+            const res = await fetch(`${API_URL}/corte-semanal`, { headers: { 'Authorization': token } });
+            const semanas = await res.json();
+            
+            const tbody = document.getElementById('cortesTableBody');
+            tbody.innerHTML = '';
+            
+            if (semanas.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">Aún no hay ventas registradas.</td></tr>`;
+            } else {
+                semanas.forEach(s => {
+                    const semanaTexto = `Del ${formatearFechaTexto(s.lunes)} al ${formatearFechaTexto(s.domingo)}`;
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="py-4 px-3 font-semibold text-slate-900">${semanaTexto}</td>
+                            <td class="py-4 px-3 font-medium text-slate-700">$${Number(s.total_vendido).toFixed(2)}</td>
+                            <td class="py-4 px-3 font-bold text-emerald-600">$${Number(s.total_caja).toFixed(2)}</td>
+                            <td class="py-4 px-3 font-bold text-rose-600">$${Number(s.total_adeudos).toFixed(2)}</td>
+                            <td class="py-4 px-3 text-right font-bold text-blue-600">+$${Number(s.total_ganancia).toFixed(2)}</td>
+                        </tr>`;
+                });
+            }
+        }
+
+        async function liquidarVenta(id) {
+            if (!confirm("¿Liquidado por completo?")) return;
+            const token = localStorage.getItem('token_admin');
+            const res = await fetch(`${API_URL}/ventas/${id}/liquidar`, { method: 'PUT', headers: { 'Authorization': token } });
+            if (res.ok) {
+                cargarHistorialVentas();
+            }
+        }
+
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = localStorage.getItem('token_admin');
+            const data = {
+                nombre: document.getElementById('nombre').value.trim(), talla: document.getElementById('talla').value.trim(),
+                precio_compra: parseFloat(document.getElementById('precio_compra').value), precio_venta: parseFloat(document.getElementById('precio_venta').value),
+                stock_actual: parseInt(document.getElementById('stock_actual').value)
+            };
+            const res = await fetch(`${API_URL}/productos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify(data) });
+            if (res.ok) { document.getElementById('productForm').reset(); cargarProductos(); }
+        });
+    </script>
+</body>
+</html>

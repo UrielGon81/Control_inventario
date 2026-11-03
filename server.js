@@ -9,28 +9,63 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// En Railway usa las variables del servicio (Variables). El .env solo sirve en local.
 const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'control_inventario_db',
+    host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || process.env.MYSQLPORT || '3306'),
+    user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || '',
+    database: process.env.DB_NAME || process.env.MYSQLDATABASE || 'control_inventario_db',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    multipleStatements: true
 });
 
-// Importación automática del respaldo SQL al arrancar en la nube
+// Importación automática del respaldo SQL si las tablas no existen todavía
+async function inicializarBD() {
+    try {
+        const [t] = await pool.query("SHOW TABLES LIKE 'productos'");
+        if (t.length > 0) {
+            console.log('✅ BD lista: la tabla productos ya existe');
+            return;
+        }
+        const ruta = path.join(__dirname, 'backup.sql');
+        if (!fs.existsSync(ruta)) {
+            console.log('⚠️ No existe backup.sql, no se importó nada');
+            return;
+        }
+        let sql = fs.readFileSync(ruta, 'utf8');
+        // Quita CREATE DATABASE / USE para no chocar con la BD de Railway
+        sql = sql.replace(/^\s*(CREATE DATABASE|USE)\b.*;\s*$/gim, '');
+        await pool.query(sql);
+        console.log('✅ backup.sql importado correctamente');
+    } catch (err) {
+        console.error('❌ Error inicializando BD:', err.message);
+    }
+}
+
+const ADMIN_PASSWORD = () => process.env.ADMIN_PASSWORD || '12345';
+
+// Para comprobar rápido que el servidor y la BD responden
+app.get('/health', async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        res.json({ ok: true, db: 'conectada' });
+    } catch (err) {
+        res.status(500).json({ ok: false, db: err.message });
+    }
+});
 
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || '12345';
-    if (password === adminPassword) res.json({ success: true });
+    if (password === ADMIN_PASSWORD()) res.json({ success: true });
     else res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
 });
 
 const verificarAcceso = (req, res, next) => {
     const token = req.headers['authorization'];
-    if (token === (process.env.ADMIN_PASSWORD || '12345')) next();
+    if (token === ADMIN_PASSWORD()) next();
     else res.status(403).json({ error: 'No autorizado' });
 };
 
@@ -53,13 +88,13 @@ app.post('/api/productos', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Venta Multi-Talla 
+// Venta Multi-Talla
 app.post('/api/ventas', verificarAcceso, async (req, res) => {
+    const { producto_id, items, monto_pagado, fecha_venta } = req.body;
+    if (!items || items.length === 0) return res.status(400).json({ error: 'No hay tallas' });
+
     const connection = await pool.getConnection();
     try {
-        const { producto_id, items, monto_pagado, fecha_venta } = req.body;
-        if (!items || items.length === 0) return res.status(400).json({ error: 'No hay tallas' });
-
         await connection.beginTransaction();
 
         const [rows] = await connection.query('SELECT precio_compra, precio_venta, stock_actual FROM productos WHERE id = ?', [producto_id]);
@@ -76,15 +111,17 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
 
         let fechaMysql = fecha_venta;
         if (!fechaMysql) fechaMysql = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        else if (fechaMysql.includes('T')) fechaMysql = fechaMysql.replace('T', ' ') + ':00';
+        else if (fechaMysql.includes('T')) {
+            fechaMysql = fechaMysql.replace('T', ' ');
+            if (fechaMysql.length === 16) fechaMysql += ':00';
+        }
 
         let anticipoRestante = parseFloat(monto_pagado) || 0;
 
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
+        for (const item of items) {
             const cantLinea = parseInt(item.cantidad) || 0;
             const subtotalLinea = precioUnitario * cantLinea;
-            
+
             let anticipoLinea = 0;
             if (anticipoRestante >= subtotalLinea) {
                 anticipoLinea = subtotalLinea;
@@ -99,21 +136,21 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
             const estadoLinea = pendienteLinea <= 0 ? 'Liquidado' : 'Pendiente de Liquidación';
 
             await connection.query(
-                `INSERT INTO ventas_diarias 
-                (producto_id, cantidad_vendida, talla_vendida, precio_total_venta, monto_pagado, monto_pendiente, ganancia_neta_total, fecha_venta, estado_pago) 
+                `INSERT INTO ventas_diarias
+                (producto_id, cantidad_vendida, talla_vendida, precio_total_venta, monto_pagado, monto_pendiente, ganancia_neta_total, fecha_venta, estado_pago)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [idProdSeguro, cantLinea, item.talla || 'Única', isNaN(subtotalLinea)?0:subtotalLinea, isNaN(anticipoLinea)?0:anticipoLinea, isNaN(pendienteLinea)?0:pendienteLinea, isNaN(gananciaLinea)?0:gananciaLinea, fechaMysql, estadoLinea]
+                [idProdSeguro, cantLinea, item.talla || 'Única', isNaN(subtotalLinea) ? 0 : subtotalLinea, isNaN(anticipoLinea) ? 0 : anticipoLinea, isNaN(pendienteLinea) ? 0 : pendienteLinea, isNaN(gananciaLinea) ? 0 : gananciaLinea, fechaMysql, estadoLinea]
             );
             await connection.query('UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?', [cantLinea, idProdSeguro]);
         }
 
         await connection.commit();
-        connection.release();
         res.json({ mensaje: 'Venta registrada' });
     } catch (err) {
         await connection.rollback();
-        connection.release();
         res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
     }
 });
 
@@ -121,7 +158,7 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
 app.get('/api/ventas-historial', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT v.id, p.nombre, v.talla_vendida, v.cantidad_vendida, v.precio_total_venta, v.monto_pagado, v.monto_pendiente, v.ganancia_neta_total, v.fecha_venta, v.estado_pago 
+            SELECT v.id, p.nombre, v.talla_vendida, v.cantidad_vendida, v.precio_total_venta, v.monto_pagado, v.monto_pendiente, v.ganancia_neta_total, v.fecha_venta, v.estado_pago
             FROM ventas_diarias v JOIN productos p ON v.producto_id = p.id
             ORDER BY v.fecha_venta DESC LIMIT 50
         `);
@@ -138,11 +175,11 @@ app.put('/api/ventas/:id/liquidar', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// HISTORIAL POR SEMANAS (Agrupa las ventas de Lunes a Domingo)
+// HISTORIAL POR SEMANAS (Lunes a Domingo)
 app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     try {
         const [semanas] = await pool.query(`
-            SELECT 
+            SELECT
                 DATE_FORMAT(DATE_ADD(DATE(fecha_venta), INTERVAL -WEEKDAY(fecha_venta) DAY), '%Y-%m-%d') as lunes,
                 DATE_FORMAT(DATE_ADD(DATE(fecha_venta), INTERVAL 6 - WEEKDAY(fecha_venta) DAY), '%Y-%m-%d') as domingo,
                 IFNULL(SUM(precio_total_venta), 0) as total_vendido,
@@ -157,11 +194,12 @@ app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 1. Cambiar el res.send por res.sendFile para que cargue tu index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. Asegurar que el puerto tome el de Railway o el 8080
+// Railway inyecta PORT automáticamente
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Servidor en puerto ${PORT} 🎯`));
+inicializarBD().finally(() => {
+    app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT} 🎯`));
+});

@@ -161,5 +161,5 @@ app.get('/', (req, res) => {
     res.send('¡Hola! El servidor de inventario está conectado y vivo 🚀');
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`Servidor en puerto ${PORT} 🎯`));

@@ -20,28 +20,6 @@ const pool = mysql.createPool({
 });
 
 // Importación automática del respaldo SQL al arrancar en la nube
-pool.getConnection((err, connection) => {
-    if (err) {
-        console.log("Error al conectar a la BD para el respaldo:", err.message);
-        return;
-    }
-    
-    const sqlFilePath = path.join(__dirname, 'backup.sql');
-    if (fs.existsSync(sqlFilePath)) {
-        const sqlQuery = fs.readFileSync(sqlFilePath, 'utf8');
-        connection.query(sqlQuery, (error, results) => {
-            connection.release();
-            if (error) {
-                console.log("Aviso en el respaldo (las tablas ya debían existir):", error.message);
-            } else {
-                console.log("¡Base de datos importada exitosamente en la nube!");
-            }
-        });
-    } else {
-        connection.release();
-        console.log("No se encontró el archivo backup.sql, continuando normalmente...");
-    }
-});
 
 app.post('/api/login', (req, res) => {
     const { password } = req.body;

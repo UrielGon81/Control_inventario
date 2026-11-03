@@ -157,9 +157,11 @@ app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 1. Cambiar el res.send por res.sendFile para que cargue tu index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
+// 2. Asegurar que el puerto tome el de Railway o el 8080
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`Servidor en puerto ${PORT} 🎯`));

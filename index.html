@@ -83,7 +83,6 @@
                                 <th class="pb-3 px-3">Cant.</th>
                                 <th class="pb-3 px-3">Total / Pagado</th>
                                 <th class="pb-3 px-3">Pendiente</th>
-                                <th class="pb-3 px-3">Estado</th>
                                 <th class="pb-3 px-3 text-right">Acción</th>
                             </tr>
                         </thead>
@@ -151,28 +150,52 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:3000/api';
+        // Ruta relativa: funciona igual en local y en Railway
+        const API_URL = '/api';
+
+        // Fetch con token; si el servidor rechaza la contraseña guardada, cierra sesión
+        async function fetchAuth(ruta, opciones = {}) {
+            const token = localStorage.getItem('token_admin');
+            const headers = Object.assign({}, opciones.headers || {}, { 'Authorization': token });
+            const res = await fetch(`${API_URL}${ruta}`, Object.assign({}, opciones, { headers }));
+            if (res.status === 403) {
+                localStorage.removeItem('token_admin');
+                alert('Sesión no válida. Vuelve a iniciar sesión.');
+                location.reload();
+                throw new Error('No autorizado');
+            }
+            return res;
+        }
+
+        function mostrarApp() {
+            document.getElementById('loginModal').classList.add('hidden');
+            document.getElementById('appContainer').classList.remove('hidden');
+            cargarProductos();
+        }
 
         window.addEventListener('DOMContentLoaded', () => {
-            const token = localStorage.getItem('token_admin');
-            if (token) {
-                document.getElementById('loginModal').classList.add('hidden');
-                document.getElementById('appContainer').classList.remove('hidden');
-                cargarProductos();
-            }
+            if (localStorage.getItem('token_admin')) mostrarApp();
         });
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const password = document.getElementById('adminPassword').value;
-            const res = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
-            const data = await res.json();
-            if (data.success) {
-                localStorage.setItem('token_admin', password);
-                document.getElementById('loginModal').classList.add('hidden');
-                document.getElementById('appContainer').classList.remove('hidden');
-                cargarProductos();
-            } else { alert(data.error); }
+            try {
+                const res = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('token_admin', password);
+                    mostrarApp();
+                } else {
+                    alert(data.error || 'Contraseña incorrecta');
+                }
+            } catch (err) {
+                alert('No se pudo conectar con el servidor: ' + err.message);
+            }
         });
 
         function cerrarSesion() { localStorage.removeItem('token_admin'); location.reload(); }
@@ -202,25 +225,27 @@
         }
 
         async function cargarProductos() {
-            const token = localStorage.getItem('token_admin');
-            const res = await fetch(`${API_URL}/productos`, { headers: { 'Authorization': token } });
-            const productos = await res.json();
-            const tbody = document.getElementById('productTableBody');
-            tbody.innerHTML = '';
-            productos.forEach(p => {
-                tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="py-3 px-3 font-medium text-slate-900">${p.nombre}</td>
-                        <td class="py-3 px-3"><span class="bg-slate-100 text-xs px-2 py-0.5 rounded-md">${p.talla}</span></td>
-                        <td class="py-3 px-3 text-slate-500">$${Number(p.precio_compra).toFixed(2)}</td>
-                        <td class="py-3 px-3 font-medium">$${Number(p.precio_venta).toFixed(2)}</td>
-                        <td class="py-3 px-3 font-semibold text-emerald-600">+$${Number(p.ganancia_unitaria).toFixed(2)}</td>
-                        <td class="py-3 px-3 font-bold">${p.stock_actual}</td>
-                        <td class="py-3 px-3 text-right">
-                            <button onclick="abrirModalVenta(${p.id}, '${p.nombre}', '${p.talla}')" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg">Vender</button>
-                        </td>
-                    </tr>`;
-            });
+            try {
+                const res = await fetchAuth('/productos');
+                const productos = await res.json();
+                if (!res.ok) return alert('Error: ' + (productos.error || 'no se pudieron cargar los productos'));
+                const tbody = document.getElementById('productTableBody');
+                tbody.innerHTML = '';
+                productos.forEach(p => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="py-3 px-3 font-medium text-slate-900">${p.nombre}</td>
+                            <td class="py-3 px-3"><span class="bg-slate-100 text-xs px-2 py-0.5 rounded-md">${p.talla}</span></td>
+                            <td class="py-3 px-3 text-slate-500">$${Number(p.precio_compra).toFixed(2)}</td>
+                            <td class="py-3 px-3 font-medium">$${Number(p.precio_venta).toFixed(2)}</td>
+                            <td class="py-3 px-3 font-semibold text-emerald-600">+$${Number(p.ganancia_unitaria).toFixed(2)}</td>
+                            <td class="py-3 px-3 font-bold">${p.stock_actual}</td>
+                            <td class="py-3 px-3 text-right">
+                                <button onclick="abrirModalVenta(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}', '${String(p.talla).replace(/'/g, "\\'")}')" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg">Vender</button>
+                            </td>
+                        </tr>`;
+                });
+            } catch (err) { console.error(err); }
         }
 
         function abrirModalVenta(id, nombre, tallaBase) {
@@ -251,7 +276,6 @@
 
         document.getElementById('formVentaModal').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const token = localStorage.getItem('token_admin');
             
             const filasTallas = document.querySelectorAll('#contenedorTallas > div');
             let itemsArray = [];
@@ -270,42 +294,47 @@
                 fecha_venta: document.getElementById('modalFecha').value
             };
 
-            const res = await fetch(`${API_URL}/ventas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify(data) });
-            const resultado = await res.json();
+            try {
+                const res = await fetchAuth('/ventas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                const resultado = await res.json();
 
-            if (res.ok) {
-                cerrarModalVenta();
-                cargarProductos();
-            } else { alert("Error: " + (resultado.error || "No se guardó")); }
+                if (res.ok) {
+                    cerrarModalVenta();
+                    document.getElementById('modalPagado').value = '';
+                    cargarProductos();
+                } else { alert("Error: " + (resultado.error || "No se guardó")); }
+            } catch (err) { console.error(err); }
         });
 
         async function cargarHistorialVentas() {
-            const token = localStorage.getItem('token_admin');
-            const res = await fetch(`${API_URL}/ventas-historial`, { headers: { 'Authorization': token } });
-            const ventas = await res.json();
-            const tbody = document.getElementById('ventasTableBody');
-            tbody.innerHTML = '';
-            ventas.forEach(v => {
-                const fecha = new Date(v.fecha_venta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
-                const estadoBadge = v.monto_pendiente > 0 
-                    ? `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-md">Debe $${v.monto_pendiente}</span>` 
-                    : `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-md">Liquidado</span>`;
-                
-                const boton = v.monto_pendiente > 0 ? `<button onclick="liquidarVenta(${v.id})" class="bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-lg">Liquidar</button>` : '';
+            try {
+                const res = await fetchAuth('/ventas-historial');
+                const ventas = await res.json();
+                if (!res.ok) return alert('Error: ' + (ventas.error || 'no se pudo cargar el historial'));
+                const tbody = document.getElementById('ventasTableBody');
+                tbody.innerHTML = '';
+                ventas.forEach(v => {
+                    const fecha = new Date(v.fecha_venta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+                    const estadoBadge = v.monto_pendiente > 0 
+                        ? `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-md">Debe $${v.monto_pendiente}</span>` 
+                        : `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-md">Liquidado</span>`;
+                    
+                    const boton = v.monto_pendiente > 0 ? `<button onclick="liquidarVenta(${v.id})" class="bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-lg">Liquidar</button>` : '';
 
-                tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="py-3 px-3 text-slate-500 text-xs">${fecha}</td>
-                        <td class="py-3 px-3 font-medium">${v.nombre} <span class="text-xs bg-slate-100 px-1 py-0.5 rounded">(${v.talla_vendida})</span></td>
-                        <td class="py-3 px-3">${v.cantidad_vendida} pza</td>
-                        <td class="py-3 px-3">$${v.precio_total_venta} <span class="text-emerald-600">(Pag: $${v.monto_pagado})</span></td>
-                        <td class="py-3 px-3">${estadoBadge}</td>
-                        <td class="py-3 px-3 text-right">${boton}</td>
-                    </tr>`;
-            });
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="py-3 px-3 text-slate-500 text-xs">${fecha}</td>
+                            <td class="py-3 px-3 font-medium">${v.nombre} <span class="text-xs bg-slate-100 px-1 py-0.5 rounded">(${v.talla_vendida})</span></td>
+                            <td class="py-3 px-3">${v.cantidad_vendida} pza</td>
+                            <td class="py-3 px-3">$${v.precio_total_venta} <span class="text-emerald-600">(Pag: $${v.monto_pagado})</span></td>
+                            <td class="py-3 px-3">${estadoBadge}</td>
+                            <td class="py-3 px-3 text-right">${boton}</td>
+                        </tr>`;
+                });
+            } catch (err) { console.error(err); }
         }
 
-        // Función para formatear "YYYY-MM-DD" a "lun, 1 de nov"
+        // Formatea "YYYY-MM-DD" a "lun, 1 nov"
         function formatearFechaTexto(fechaStr) {
             const partes = fechaStr.split('-');
             const fecha = new Date(partes[0], partes[1] - 1, partes[2]);
@@ -313,49 +342,52 @@
         }
 
         async function cargarHistorialSemanas() {
-            const token = localStorage.getItem('token_admin');
-            const res = await fetch(`${API_URL}/corte-semanal`, { headers: { 'Authorization': token } });
-            const semanas = await res.json();
-            
-            const tbody = document.getElementById('cortesTableBody');
-            tbody.innerHTML = '';
-            
-            if (semanas.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">Aún no hay ventas registradas.</td></tr>`;
-            } else {
-                semanas.forEach(s => {
-                    const semanaTexto = `Del ${formatearFechaTexto(s.lunes)} al ${formatearFechaTexto(s.domingo)}`;
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50">
-                            <td class="py-4 px-3 font-semibold text-slate-900">${semanaTexto}</td>
-                            <td class="py-4 px-3 font-medium text-slate-700">$${Number(s.total_vendido).toFixed(2)}</td>
-                            <td class="py-4 px-3 font-bold text-emerald-600">$${Number(s.total_caja).toFixed(2)}</td>
-                            <td class="py-4 px-3 font-bold text-rose-600">$${Number(s.total_adeudos).toFixed(2)}</td>
-                            <td class="py-4 px-3 text-right font-bold text-blue-600">+$${Number(s.total_ganancia).toFixed(2)}</td>
-                        </tr>`;
-                });
-            }
+            try {
+                const res = await fetchAuth('/corte-semanal');
+                const semanas = await res.json();
+                if (!res.ok) return alert('Error: ' + (semanas.error || 'no se pudieron cargar los cortes'));
+                
+                const tbody = document.getElementById('cortesTableBody');
+                tbody.innerHTML = '';
+                
+                if (semanas.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">Aún no hay ventas registradas.</td></tr>`;
+                } else {
+                    semanas.forEach(s => {
+                        const semanaTexto = `Del ${formatearFechaTexto(s.lunes)} al ${formatearFechaTexto(s.domingo)}`;
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-4 px-3 font-semibold text-slate-900">${semanaTexto}</td>
+                                <td class="py-4 px-3 font-medium text-slate-700">$${Number(s.total_vendido).toFixed(2)}</td>
+                                <td class="py-4 px-3 font-bold text-emerald-600">$${Number(s.total_caja).toFixed(2)}</td>
+                                <td class="py-4 px-3 font-bold text-rose-600">$${Number(s.total_adeudos).toFixed(2)}</td>
+                                <td class="py-4 px-3 text-right font-bold text-blue-600">+$${Number(s.total_ganancia).toFixed(2)}</td>
+                            </tr>`;
+                    });
+                }
+            } catch (err) { console.error(err); }
         }
 
         async function liquidarVenta(id) {
             if (!confirm("¿Liquidado por completo?")) return;
-            const token = localStorage.getItem('token_admin');
-            const res = await fetch(`${API_URL}/ventas/${id}/liquidar`, { method: 'PUT', headers: { 'Authorization': token } });
-            if (res.ok) {
-                cargarHistorialVentas();
-            }
+            try {
+                const res = await fetchAuth(`/ventas/${id}/liquidar`, { method: 'PUT' });
+                if (res.ok) cargarHistorialVentas();
+            } catch (err) { console.error(err); }
         }
 
         document.getElementById('productForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const token = localStorage.getItem('token_admin');
             const data = {
                 nombre: document.getElementById('nombre').value.trim(), talla: document.getElementById('talla').value.trim(),
                 precio_compra: parseFloat(document.getElementById('precio_compra').value), precio_venta: parseFloat(document.getElementById('precio_venta').value),
                 stock_actual: parseInt(document.getElementById('stock_actual').value)
             };
-            const res = await fetch(`${API_URL}/productos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify(data) });
-            if (res.ok) { document.getElementById('productForm').reset(); cargarProductos(); }
+            try {
+                const res = await fetchAuth('/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (res.ok) { document.getElementById('productForm').reset(); cargarProductos(); }
+                else { const r = await res.json(); alert('Error: ' + (r.error || 'no se guardó')); }
+            } catch (err) { console.error(err); }
         });
     </script>
 </body>

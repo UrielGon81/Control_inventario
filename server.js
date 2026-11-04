@@ -198,6 +198,50 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Endpoint para registrar un abono a un apartado
+app.post('/api/apartados/:id/abonar', async (req, res) => {
+    const apartadoId = req.params.id;
+    const { monto_abonado, metodo_pago } = req.body; // ej: 100, "Efectivo"
+
+    try {
+        // 1. Obtener el apartado actual
+        const [apartado] = await pool.promise().query(
+            'SELECT * FROM apartados WHERE id = ?', 
+            [apartadoId]
+        );
+
+        if (apartado.length === 0) {
+            return res.status(404).json({ success: false, message: 'Apartado no encontrado' });
+        }
+
+        let nuevoSaldo = parseFloat(apartado[0].saldo_pendiente) - parseFloat(monto_abonado);
+        let nuevoEstado = nuevoSaldo <= 0 ? 'Liquidado' : 'Pendiente';
+        if (nuevoSaldo < 0) nuevoSaldo = 0; // Evitar saldos negativos
+
+        // 2. Insertar el abono en el historial
+        await pool.promise().query(
+            'INSERT INTO abonos_apartados (apartado_id, monto_abonado, metodo_pago) VALUES (?, ?, ?)',
+            [apartadoId, monto_abonado, metodo_pago]
+        );
+
+        // 3. Actualizar el saldo pendiente y el estado en la tabla principal
+        await pool.promise().query(
+            'UPDATE apartados SET saldo_pendiente = ?, estado = ? WHERE id = ?',
+            [nuevoSaldo, nuevoEstado, apartadoId]
+        );
+
+        // 4. Si el estado cambia a 'Liquidado', pasamos la ganancia completa a las métricas del negocio
+        if (nuevoEstado === 'Liquidado') {
+            // Aquí puedes disparar la lógica para registrar oficialmente la venta y la ganancia total
+        }
+
+        res.json({ success: true, message: 'Abono registrado con éxito', nuevoSaldo, estado: nuevoEstado });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Error al procesar el abono' });
+    }
+});
 // Railway inyecta PORT automáticamente
 const PORT = process.env.PORT || 8080;
 inicializarBD().finally(() => {

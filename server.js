@@ -123,6 +123,45 @@ app.put('/api/productos/:id', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- VARIANTES DE PRODUCTOS (Tallas y Colores específicos con su stock) ---
+app.get('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM variantes_productos WHERE producto_id = ?', [req.params.id]);
+        res.json(rows);
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
+    }
+});
+
+app.post('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
+    const productoId = req.params.id;
+    const { variantes } = req.body; // Array de { color, talla, stock }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        await connection.query('DELETE FROM variantes_productos WHERE producto_id = ?', [productoId]);
+
+        if (variantes && variantes.length > 0) {
+            for (const v of variantes) {
+                await connection.query(
+                    'INSERT INTO variantes_productos (producto_id, color, talla, stock) VALUES (?, ?, ?, ?)',
+                    [productoId, v.color || 'General', v.talla || 'Única', parseInt(v.stock) || 0]
+                );
+            }
+        }
+
+        await connection.commit();
+        res.json({ success: true, mensaje: 'Variantes actualizadas correctamente' });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
 // --- VENTAS Y APARTADOS ---
 app.post('/api/ventas', verificarAcceso, async (req, res) => {
     const { producto_id, items, monto_pagado, fecha_venta } = req.body;

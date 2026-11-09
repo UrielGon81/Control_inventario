@@ -166,29 +166,30 @@
     </div>
 
     <!-- MODAL DETALLE SEMANAL -->
-<div id="modalDetalleSemana" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-2xl max-w-4xl w-full space-y-4 max-h-[85vh] flex flex-col">
-        <div class="flex justify-between items-center">
-            <h3 id="tituloModalSemana" class="text-lg font-bold text-white">Detalle de Ventas de la Semana</h3>
-            <button onclick="cerrarModalSemana()" class="text-slate-400 hover:text-white font-bold p-1">✕</button>
-        </div>
-        <div class="overflow-y-auto flex-1">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="border-b border-slate-800 text-slate-400 font-semibold text-xs uppercase tracking-wider">
-                        <th class="pb-3 px-3">Fecha</th>
-                        <th class="pb-3 px-3">Producto</th>
-                        <th class="pb-3 px-3">Cant.</th>
-                        <th class="pb-3 px-3">Total / Pagado</th>
-                        <th class="pb-3 px-3">Estado</th>
-                        <th class="pb-3 px-3 text-right">Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="detalleSemanaTableBody" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
-            </table>
+    <div id="modalDetalleSemana" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-2xl max-w-4xl w-full space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center">
+                <h3 id="tituloModalSemana" class="text-lg font-bold text-white">Detalle de Ventas de la Semana</h3>
+                <button onclick="cerrarModalSemana()" class="text-slate-400 hover:text-white font-bold p-1">✕</button>
+            </div>
+            <div class="overflow-y-auto flex-1">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 font-semibold text-xs uppercase tracking-wider">
+                            <th class="pb-3 px-3">Fecha</th>
+                            <th class="pb-3 px-3">Producto</th>
+                            <th class="pb-3 px-3">Cant.</th>
+                            <th class="pb-3 px-3">Total / Pagado</th>
+                            <th class="pb-3 px-3">Estado</th>
+                            <th class="pb-3 px-3 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detalleSemanaTableBody" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
+                </table>
+            </div>
         </div>
     </div>
-</div>
+
     <script>
         const API_URL = '/api';
 
@@ -225,8 +226,9 @@
                     body: JSON.stringify({ password })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    localStorage.setItem('token_admin', password);
+                if (data.success && data.token) {
+                    // AQUÍ ESTÁ EL CAMBIO CORRECTO: Guardamos el token JWT que emite el servidor
+                    localStorage.setItem('token_admin', data.token);
                     mostrarApp();
                 } else {
                     alert(data.error || 'Contraseña incorrecta');
@@ -457,7 +459,7 @@
             return fecha.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
         }
 
-   async function cargarHistorialSemanas() {
+        async function cargarHistorialSemanas() {
             try {
                 const res = await fetchAuth('/corte-semanal');
                 const semanas = await res.json();
@@ -483,7 +485,7 @@
         }
 
         async function verDetalleSemana(lunes, domingo, textoSemana) {
-            document.getElementById('tituloModalSemana.innerText') = `Ventas: ${textoSemana}`;
+            document.getElementById('tituloModalSemana').innerText = `Ventas: ${textoSemana}`;
             document.getElementById('modalDetalleSemana').classList.remove('hidden');
             
             try {
@@ -535,7 +537,7 @@
                 });
                 if (res.ok) {
                     verDetalleSemana(lunes, domingo, textoSemana);
-                    cargarHistorialSemanas(); // Actualiza la tabla principal de fondo
+                    cargarHistorialSemanas();
                 } else {
                     alert("No se pudo registrar el abono");
                 }

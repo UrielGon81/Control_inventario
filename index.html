@@ -278,7 +278,6 @@
                 for (const p of productos) {
                     const imgTag = p.imagen ? `<img src="${p.imagen}" class="w-9 h-9 object-cover rounded-lg border border-white/10">` : `<div class="w-9 h-9 bg-white/5 rounded-lg border border-white/10 flex items-center justify-center text-[10px] text-slate-500">Sin img</div>`;
                     
-                    // Fila principal del producto (Clicable para desplegar variantes)
                     tbody.innerHTML += `
                         <tr class="hover:bg-white/[0.02] transition cursor-pointer" onclick="toggleDesplegable(${p.id})">
                             <td class="py-3 px-4">${imgTag}</td>
@@ -295,7 +294,6 @@
                                 <button onclick="abrirModalVenta(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}')" class="bg-white hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-medium transition">Vender</button>
                             </td>
                         </tr>
-                        <!-- Fila desplegable oculta con el detalle y editor de variantes -->
                         <tr id="desplegable-${p.id}" class="hidden bg-[#0e0e12] border-y border-white/5">
                             <td colspan="7" class="p-4">
                                 <div class="space-y-3 max-w-3xl mx-auto">
@@ -348,7 +346,7 @@
                 let html = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">`;
                 variantes.forEach(v => {
                     html += `
-                        flex justify-between items-center bg-[#121216] border border-white/5 p-3 rounded-xl">
+                        <div class="flex justify-between items-center bg-[#121216] border border-white/5 p-3 rounded-xl">
                             <div class="flex items-center gap-3">
                                 <span class="text-white font-medium text-xs">${v.color}</span>
                                 <span class="bg-white/5 text-indigo-300 text-[10px] px-2 py-0.5 rounded border border-white/10">${v.talla}</span>
@@ -379,7 +377,7 @@
 
                 const index = actuales.findIndex(v => v.color.toLowerCase() === color.toLowerCase() && v.talla.toLowerCase() === talla.toLowerCase());
                 if (index >= 0) {
-                    actuales[index].stock += stock; // Suma al stock existente
+                    actuales[index].stock += stock;
                 } else {
                     actuales.push({ color, talla, stock });
                 }
@@ -452,7 +450,7 @@
                 precio_compra: parseFloat(document.getElementById('precio_compra').value),
                 precio_venta: parseFloat(document.getElementById('precio_venta').value),
                 imagen: document.getElementById('imagen').value.trim(),
-                variantes: [] // Se gestionan de forma dinámica desde la vista desplegable
+                variantes: []
             };
 
             const url = id ? `${API_URL}/productos/${id}` : `${API_URL}/productos`;

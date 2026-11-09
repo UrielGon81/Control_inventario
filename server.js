@@ -4,10 +4,26 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+
+// 1. Cabeceras de seguridad HTTP básicas
+app.use(helmet({
+    contentSecurityPolicy: false, // Permitir scripts externos como Tailwind y fuentes si es necesario
+}));
+
 app.use(express.json());
 app.use(cors());
+
+// 2. Límite de peticiones (Rate Limiting) para evitar ataques de fuerza bruta en el login
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 10, // Máximo 10 intentos por IP
+    mensaje: { success: false, error: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.' }
+});
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
@@ -39,7 +55,9 @@ async function inicializarBD() {
     }
 }
 
-const ADMIN_PASSWORD = () => process.env.ADMIN_PASSWORD || '12345';
+// Clave secreta robusta para JWT (usa variable de entorno obligatoria en producción)
+const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_super_segura_cambiar_en_produccion';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '12345';
 
 app.get('/health', async (req, res) => {
     try {
@@ -50,19 +68,34 @@ app.get('/health', async (req, res) => {
     }
 });
 
-app.post('/api/login', (req, res) => {
+// Endpoint de Login con protección de frecuencia (Rate Limit) y JWT
+app.post('/api/login', loginLimiter, (req, res) => {
     const { password } = req.body;
-    if (password === ADMIN_PASSWORD()) res.json({ success: true });
-    else res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    if (password === ADMIN_PASSWORD) {
+        // Generar un token válido por 24 horas
+        const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ success: true, token });
+    } else {
+        res.status(401).json({ success: false, error: 'Contraseña incorrecta' });
+    }
 });
 
+// Middleware de verificación de Token JWT
 const verificarAcceso = (req, res, next) => {
-    const token = req.headers['authorization'];
-    if (token === ADMIN_PASSWORD()) next();
-    else res.status(403).json({ error: 'No autorizado' });
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.status(403).json({ error: 'Token no proporcionado' });
+
+    // El formato esperado es "Bearer <token>" o directamente el token
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7, authHeader.length) : authHeader;
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(403).json({ error: 'Sesión expirada o no autorizada' });
+        req.user = decoded;
+        next();
+    });
 };
 
-// --- PRODUCTOS (Con Color e Imagen) ---
+// --- PRODUCTOS ---
 app.get('/api/productos', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT p.*, (p.precio_venta - p.precio_compra) AS ganancia_unitaria FROM productos p');
@@ -196,7 +229,7 @@ app.post('/api/ventas/:id/abonar', verificarAcceso, async (req, res) => {
     }
 });
 
-// HISTORIAL POR SEMANAS (Lunes a Domingo)
+// HISTORIAL POR SEMANAS Y DETALLE
 app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     try {
         const [semanas] = await pool.query(`
@@ -215,10 +248,6 @@ app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-// --- OBTENER VENTAS DE UNA SEMANA ESPECÍFICA ---
 app.get('/api/corte-semanal/detalle', verificarAcceso, async (req, res) => {
     const { inicio, fin } = req.query;
     try {
@@ -236,7 +265,12 @@ app.get('/api/corte-semanal/detalle', verificarAcceso, async (req, res) => {
         res.status(500).json({ error: err.message }); 
     }
 });
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 const PORT = process.env.PORT || 8080;
 inicializarBD().finally(() => {
-    app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT} 🎯`));
+    app.listen(PORT, '0.0.0.0', () => console.log(`Servidor seguro en puerto ${PORT} 🛡️`));
 });

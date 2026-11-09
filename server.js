@@ -218,7 +218,24 @@ app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-
+// --- OBTENER VENTAS DE UNA SEMANA ESPECÍFICA ---
+app.get('/api/corte-semanal/detalle', verificarAcceso, async (req, res) => {
+    const { inicio, fin } = req.query;
+    try {
+        const [rows] = await pool.query(`
+            SELECT v.id, p.nombre, p.imagen, v.talla_vendida, v.cantidad_vendida, 
+                   v.precio_total_venta, v.monto_pagado, v.monto_pendiente, 
+                   v.ganancia_neta_total, v.fecha_venta, v.estado_pago
+            FROM ventas_diarias v 
+            JOIN productos p ON v.producto_id = p.id
+            WHERE DATE(v.fecha_venta) BETWEEN ? AND ?
+            ORDER BY v.fecha_venta DESC
+        `, [inicio, fin]);
+        res.json(rows);
+    } catch (err) { 
+        res.status(500).json({ error: err.message }); 
+    }
+});
 const PORT = process.env.PORT || 8080;
 inicializarBD().finally(() => {
     app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT} 🎯`));

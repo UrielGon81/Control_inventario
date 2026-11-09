@@ -1,51 +1,40 @@
--- Usar la base de datos de Railway
-USE railway;
+-- --------------------------------------------------------
+-- Host:                         roundhouse.proxy.rlwy.net
+-- Versión del servidor:         8.4.13 - MySQL Community Server - GPL
+-- SO del servidor:              Linux
+-- HeidiSQL Versión:             12.20.0.7320
+-- --------------------------------------------------------
 
--- Desactivar temporalmente restricciones de llaves foráneas
-SET FOREIGN_KEY_CHECKS=0;
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
--- Crear la tabla productos si no existe
-CREATE TABLE IF NOT EXISTS `productos` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(255) NOT NULL,
-  `precio_compra` decimal(10,2) NOT NULL,
-  `precio_venta` decimal(10,2) NOT NULL,
-  `stock_actual` int(11) NOT NULL,
-  `creado_en` datetime DEFAULT CURRENT_TIMESTAMP,
-  `talla` varchar(100) DEFAULT 'Única',
-  `imagen` text DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Volcando datos para la tabla railway.abonos_apartados: ~0 rows (aproximadamente)
 
--- Crear la tabla ventas_diarias si no existe
-CREATE TABLE IF NOT EXISTS `ventas_diarias` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `producto_id` int(11) NOT NULL,
-  `cantidad_vendida` int(11) NOT NULL,
-  `ganancia_neta_total` decimal(10,2) NOT NULL,
-  `fecha_venta` datetime NOT NULL,
-  `precio_total_venta` decimal(10,2) NOT NULL,
-  `monto_pagado` decimal(10,2) NOT NULL,
-  `monto_pendiente` decimal(10,2) NOT NULL,
-  `estado_pago` varchar(50) NOT NULL,
-  `talla_vendida` varchar(50) DEFAULT 'Única',
-  PRIMARY KEY (`id`),
-  KEY `producto_id` (`producto_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Volcando datos para la tabla railway.apartados: ~0 rows (aproximadamente)
 
--- Limpiar datos previos para evitar duplicados al reimportar
-TRUNCATE TABLE `ventas_diarias`;
-TRUNCATE TABLE `productos`;
+-- Volcando datos para la tabla railway.detalle_apartados: ~0 rows (aproximadamente)
 
--- Insertar datos en productos
+-- Volcando datos para la tabla railway.productos: ~3 rows (aproximadamente)
 INSERT INTO `productos` (`id`, `nombre`, `precio_compra`, `precio_venta`, `stock_actual`, `creado_en`, `talla`, `imagen`) VALUES
-(2, 'Sudaderas Essentials', 450.00, 690.00, 21, '2026-11-03 17:13:28', 'XS, M, G, EG', 'https://fearofgod.com/cdn/shop/files/MARCH26_M_L58_P_7317.jpg?v=1776266105&width=2400');
+	(3, 'Sudadera Essential', 450.00, 690.00, 20, '2026-11-04 17:16:23', 'XS, S, M, G, EX', ''),
+	(4, 'Chamarra Yhisai', 300.00, 550.00, 24, '2026-11-07 03:37:07', '6, 8, 10, 12, 14, 16', ''),
+	(5, 'Chamarra comisso', 320.00, 590.00, 30, '2026-11-08 00:42:47', '6, 8, 10, 12, 14, 16', '');
 
--- Insertar datos en ventas_diarias
+-- Volcando datos para la tabla railway.ventas_diarias: ~4 rows (aproximadamente)
 INSERT INTO `ventas_diarias` (`id`, `producto_id`, `cantidad_vendida`, `ganancia_neta_total`, `fecha_venta`, `precio_total_venta`, `monto_pagado`, `monto_pendiente`, `estado_pago`, `talla_vendida`) VALUES
-(1, 2, 1, 240.00, '2026-11-03 11:18:33', 0.00, 0.00, 0.00, 'Pendiente', 'Única'),
-(2, 2, 1, 240.00, '2026-11-01 19:00:00', 690.00, 500.00, 190.00, 'Pendiente de Liquidación', 'XS'),
-(3, 2, 1, 240.00, '2026-11-01 19:00:00', 690.00, 0.00, 690.00, 'Pendiente de Liquidación', 'M');
+	(4, 3, 1, 240.00, '2026-10-30 10:17:00', 690.00, 690.00, 0.00, 'Liquidado', 'M'),
+	(5, 3, 1, 240.00, '2026-11-01 19:40:00', 690.00, 500.00, 190.00, 'Pendiente de Liquidación', 'XS'),
+	(6, 3, 1, 240.00, '2026-11-01 19:40:00', 690.00, 0.00, 690.00, 'Pendiente de Liquidación', 'M'),
+	(7, 3, 1, 240.00, '2026-11-07 16:39:00', 690.00, 690.00, 0.00, 'Liquidado', 'L');
 
--- Reactivar restricciones
-SET FOREIGN_KEY_CHECKS=1;
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

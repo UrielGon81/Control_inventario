@@ -9,7 +9,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// En Railway usa las variables del servicio (Variables). El .env solo sirve en local.
 const pool = mysql.createPool({
     host: process.env.DB_HOST || process.env.MYSQLHOST || 'localhost',
     port: parseInt(process.env.DB_PORT || process.env.MYSQLPORT || '3306'),
@@ -22,7 +21,6 @@ const pool = mysql.createPool({
     multipleStatements: true
 });
 
-// Importación automática del respaldo SQL si las tablas no existen todavía
 async function inicializarBD() {
     try {
         const [t] = await pool.query("SHOW TABLES LIKE 'productos'");
@@ -31,12 +29,8 @@ async function inicializarBD() {
             return;
         }
         const ruta = path.join(__dirname, 'backup.sql');
-        if (!fs.existsSync(ruta)) {
-            console.log('⚠️ No existe backup.sql, no se importó nada');
-            return;
-        }
+        if (!fs.existsSync(ruta)) return;
         let sql = fs.readFileSync(ruta, 'utf8');
-        // Quita CREATE DATABASE / USE para no chocar con la BD de Railway
         sql = sql.replace(/^\s*(CREATE DATABASE|USE)\b.*;\s*$/gim, '');
         await pool.query(sql);
         console.log('✅ backup.sql importado correctamente');
@@ -47,7 +41,6 @@ async function inicializarBD() {
 
 const ADMIN_PASSWORD = () => process.env.ADMIN_PASSWORD || '12345';
 
-// Para comprobar rápido que el servidor y la BD responden
 app.get('/health', async (req, res) => {
     try {
         await pool.query('SELECT 1');
@@ -69,7 +62,7 @@ const verificarAcceso = (req, res, next) => {
     else res.status(403).json({ error: 'No autorizado' });
 };
 
-// Productos
+// --- PRODUCTOS (Con Color e Imagen) ---
 app.get('/api/productos', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT p.*, (p.precio_venta - p.precio_compra) AS ganancia_unitaria FROM productos p');
@@ -79,16 +72,28 @@ app.get('/api/productos', verificarAcceso, async (req, res) => {
 
 app.post('/api/productos', verificarAcceso, async (req, res) => {
     try {
-        const { nombre, precio_compra, precio_venta, stock_actual, talla, imagen } = req.body;
+        const { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
         const [result] = await pool.query(
-            'INSERT INTO productos (nombre, precio_compra, precio_venta, stock_actual, talla, imagen) VALUES (?, ?, ?, ?, ?, ?)',
-            [nombre, precio_compra, precio_venta, stock_actual, talla || 'Única', imagen || '']
+            'INSERT INTO productos (nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [nombre, precio_compra, precio_venta, stock_actual, talla || 'Única', color || 'General', imagen || '']
         );
         res.json({ id: result.insertId });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Venta Multi-Talla
+app.put('/api/productos/:id', verificarAcceso, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
+        await pool.query(
+            'UPDATE productos SET nombre = ?, precio_compra = ?, precio_venta = ?, stock_actual = ?, talla = ?, color = ?, imagen = ? WHERE id = ?',
+            [nombre, precio_compra, precio_venta, stock_actual, talla || 'Única', color || 'General', imagen || '', id]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- VENTAS Y APARTADOS ---
 app.post('/api/ventas', verificarAcceso, async (req, res) => {
     const { producto_id, items, monto_pagado, fecha_venta } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No hay tallas' });
@@ -104,17 +109,12 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
         const precioUnitario = parseFloat(prod.precio_venta) || 0;
         const costoUnitario = parseFloat(prod.precio_compra) || 0;
         const stockActual = parseInt(prod.stock_actual) || 0;
-        const idProdSeguro = parseInt(producto_id) || 0;
 
         const totalPiezas = items.reduce((sum, item) => sum + (parseInt(item.cantidad) || 0), 0);
         if (stockActual < totalPiezas) throw new Error('Stock insuficiente');
 
-        let fechaMysql = fecha_venta;
-        if (!fechaMysql) fechaMysql = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        else if (fechaMysql.includes('T')) {
-            fechaMysql = fechaMysql.replace('T', ' ');
-            if (fechaMysql.length === 16) fechaMysql += ':00';
-        }
+        let fechaMysql = fecha_venta ? fecha_venta.replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' ');
+        if (fechaMysql.length === 16) fechaMysql += ':00';
 
         let anticipoRestante = parseFloat(monto_pagado) || 0;
 
@@ -134,14 +134,15 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
             const pendienteLinea = subtotalLinea - anticipoLinea;
             const gananciaLinea = (precioUnitario - costoUnitario) * cantLinea;
             const estadoLinea = pendienteLinea <= 0 ? 'Liquidado' : 'Pendiente de Liquidación';
+            const detalleTallaColor = `${item.talla || 'Única'} / ${item.color || 'General'}`;
 
             await connection.query(
                 `INSERT INTO ventas_diarias
                 (producto_id, cantidad_vendida, talla_vendida, precio_total_venta, monto_pagado, monto_pendiente, ganancia_neta_total, fecha_venta, estado_pago)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [idProdSeguro, cantLinea, item.talla || 'Única', isNaN(subtotalLinea) ? 0 : subtotalLinea, isNaN(anticipoLinea) ? 0 : anticipoLinea, isNaN(pendienteLinea) ? 0 : pendienteLinea, isNaN(gananciaLinea) ? 0 : gananciaLinea, fechaMysql, estadoLinea]
+                [producto_id, cantLinea, detalleTallaColor, subtotalLinea, anticipoLinea, pendienteLinea, gananciaLinea, fechaMysql, estadoLinea]
             );
-            await connection.query('UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?', [cantLinea, idProdSeguro]);
+            await connection.query('UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?', [cantLinea, producto_id]);
         }
 
         await connection.commit();
@@ -154,25 +155,45 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
     }
 });
 
-// Historial Individual
 app.get('/api/ventas-historial', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT v.id, p.nombre, v.talla_vendida, v.cantidad_vendida, v.precio_total_venta, v.monto_pagado, v.monto_pendiente, v.ganancia_neta_total, v.fecha_venta, v.estado_pago
+            SELECT v.id, p.nombre, p.imagen, v.talla_vendida, v.cantidad_vendida, v.precio_total_venta, v.monto_pagado, v.monto_pendiente, v.ganancia_neta_total, v.fecha_venta, v.estado_pago
             FROM ventas_diarias v JOIN productos p ON v.producto_id = p.id
-            ORDER BY v.fecha_venta DESC LIMIT 50
+            ORDER BY v.fecha_venta DESC LIMIT 100
         `);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/ventas/:id/liquidar', verificarAcceso, async (req, res) => {
+app.post('/api/ventas/:id/abonar', verificarAcceso, async (req, res) => {
+    const ventaId = req.params.id;
+    const { monto_abonado } = req.body;
+
+    const connection = await pool.getConnection();
     try {
-        const [ventaRows] = await pool.query('SELECT precio_total_venta FROM ventas_diarias WHERE id = ?', [req.params.id]);
-        if (ventaRows.length === 0) return res.status(404).json({ error: 'Venta no encontrada' });
-        await pool.query(`UPDATE ventas_diarias SET monto_pagado = ?, monto_pendiente = 0, estado_pago = 'Liquidado' WHERE id = ?`, [ventaRows[0].precio_total_venta, req.params.id]);
-        res.json({ mensaje: 'Liquidada' });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+        await connection.beginTransaction();
+        const [rows] = await connection.query('SELECT precio_total_venta, monto_pagado FROM ventas_diarias WHERE id = ?', [ventaId]);
+        if (rows.length === 0) throw new Error('Venta no encontrada');
+
+        const venta = rows[0];
+        const nuevoPagado = parseFloat(venta.monto_pagado) + parseFloat(monto_abonado);
+        const nuevoPendiente = Math.max(0, parseFloat(venta.precio_total_venta) - nuevoPagado);
+        const nuevoEstado = nuevoPendiente === 0 ? 'Liquidado' : 'Pendiente de Liquidación';
+
+        await connection.query(
+            'UPDATE ventas_diarias SET monto_pagado = ?, monto_pendiente = ?, estado_pago = ? WHERE id = ?',
+            [nuevoPagado, nuevoPendiente, nuevoEstado, ventaId]
+        );
+
+        await connection.commit();
+        res.json({ success: true, mensaje: 'Abono registrado correctamente', nuevoPendiente, estado: nuevoEstado });
+    } catch (err) {
+        await connection.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
 });
 
 // HISTORIAL POR SEMANAS (Lunes a Domingo)
@@ -198,51 +219,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Endpoint para registrar un abono a un apartado
-app.post('/api/apartados/:id/abonar', async (req, res) => {
-    const apartadoId = req.params.id;
-    const { monto_abonado, metodo_pago } = req.body; // ej: 100, "Efectivo"
-
-    try {
-        // 1. Obtener el apartado actual
-        const [apartado] = await pool.promise().query(
-            'SELECT * FROM apartados WHERE id = ?', 
-            [apartadoId]
-        );
-
-        if (apartado.length === 0) {
-            return res.status(404).json({ success: false, message: 'Apartado no encontrado' });
-        }
-
-        let nuevoSaldo = parseFloat(apartado[0].saldo_pendiente) - parseFloat(monto_abonado);
-        let nuevoEstado = nuevoSaldo <= 0 ? 'Liquidado' : 'Pendiente';
-        if (nuevoSaldo < 0) nuevoSaldo = 0; // Evitar saldos negativos
-
-        // 2. Insertar el abono en el historial
-        await pool.promise().query(
-            'INSERT INTO abonos_apartados (apartado_id, monto_abonado, metodo_pago) VALUES (?, ?, ?)',
-            [apartadoId, monto_abonado, metodo_pago]
-        );
-
-        // 3. Actualizar el saldo pendiente y el estado en la tabla principal
-        await pool.promise().query(
-            'UPDATE apartados SET saldo_pendiente = ?, estado = ? WHERE id = ?',
-            [nuevoSaldo, nuevoEstado, apartadoId]
-        );
-
-        // 4. Si el estado cambia a 'Liquidado', pasamos la ganancia completa a las métricas del negocio
-        if (nuevoEstado === 'Liquidado') {
-            // Aquí puedes disparar la lógica para registrar oficialmente la venta y la ganancia total
-        }
-
-        res.json({ success: true, message: 'Abono registrado con éxito', nuevoSaldo, estado: nuevoEstado });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Error al procesar el abono' });
-    }
-});
-// Railway inyecta PORT automáticamente
 const PORT = process.env.PORT || 8080;
 inicializarBD().finally(() => {
     app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT} 🎯`));

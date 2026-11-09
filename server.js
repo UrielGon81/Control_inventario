@@ -10,18 +10,13 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 
-// 1. Cabeceras de seguridad HTTP básicas
-app.use(helmet({
-    contentSecurityPolicy: false,
-}));
-
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(cors());
 
-// 2. Límite de peticiones (Rate Limiting) para evitar ataques de fuerza bruta en el login
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 10, // Máximo 10 intentos por IP
+    windowMs: 15 * 60 * 1000,
+    max: 10,
     message: { success: false, error: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.' }
 });
 
@@ -67,7 +62,6 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Endpoint de Login con protección de frecuencia y JWT
 app.post('/api/login', loginLimiter, (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -78,7 +72,6 @@ app.post('/api/login', loginLimiter, (req, res) => {
     }
 });
 
-// Middleware de verificación de Token JWT
 const verificarAcceso = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.status(403).json({ error: 'Token no proporcionado' });
@@ -92,7 +85,7 @@ const verificarAcceso = (req, res, next) => {
     });
 };
 
-// --- PRODUCTOS ---
+// --- PRODUCTOS (Blindado contra campos vacíos o nulos) ---
 app.get('/api/productos', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT p.*, (p.precio_venta - p.precio_compra) AS ganancia_unitaria FROM productos p');
@@ -102,47 +95,67 @@ app.get('/api/productos', verificarAcceso, async (req, res) => {
 
 app.post('/api/productos', verificarAcceso, async (req, res) => {
     try {
-        const { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
+        let { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
+        
+        // Valores por defecto seguros para evitar errores de base de datos
+        nombre = nombre ? nombre.trim() : 'Sin nombre';
+        precio_compra = parseFloat(precio_compra) || 0;
+        precio_venta = parseFloat(precio_venta) || 0;
+        stock_actual = parseInt(stock_actual) || 0;
+        talla = talla ? talla.trim() : 'Única';
+        color = color ? color.trim() : 'General';
+        imagen = imagen ? imagen.trim() : '';
+
         const [result] = await pool.query(
             'INSERT INTO productos (nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [nombre, precio_compra, precio_venta, stock_actual, talla || 'Única', color || 'General', imagen || '']
+            [nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen]
         );
-        res.json({ id: result.insertId });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+        res.json({ id: result.insertId, success: true });
+    } catch (err) { 
+        console.error("Error en POST /api/productos:", err.message);
+        res.status(500).json({ error: err.message }); 
+    }
 });
 
 app.put('/api/productos/:id', verificarAcceso, async (req, res) => {
     try {
         const { id } = req.params;
-        const { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
+        let { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
+        
+        nombre = nombre ? nombre.trim() : 'Sin nombre';
+        precio_compra = parseFloat(precio_compra) || 0;
+        precio_venta = parseFloat(precio_venta) || 0;
+        stock_actual = parseInt(stock_actual) || 0;
+        talla = talla ? talla.trim() : 'Única';
+        color = color ? color.trim() : 'General';
+        imagen = imagen ? imagen.trim() : '';
+
         await pool.query(
             'UPDATE productos SET nombre = ?, precio_compra = ?, precio_venta = ?, stock_actual = ?, talla = ?, color = ?, imagen = ? WHERE id = ?',
-            [nombre, precio_compra, precio_venta, stock_actual, talla || 'Única', color || 'General', imagen || '', id]
+            [nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen, id]
         );
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// --- VARIANTES DE PRODUCTOS (Tallas y Colores específicos con su stock) ---
-app.get('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
-    try {
-        const [rows] = await pool.query('SELECT * FROM variantes_productos WHERE producto_id = ?', [req.params.id]);
-        res.json(rows);
     } catch (err) { 
+        console.error("Error en PUT /api/productos/:id:", err.message);
         res.status(500).json({ error: err.message }); 
     }
 });
 
+// --- VARIANTES ---
+app.get('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM variantes_productos WHERE producto_id = ?', [req.params.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
     const productoId = req.params.id;
-    const { variantes } = req.body; // Array de { color, talla, stock }
-
+    const { variantes } = req.body;
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-
         await connection.query('DELETE FROM variantes_productos WHERE producto_id = ?', [productoId]);
-
         if (variantes && variantes.length > 0) {
             for (const v of variantes) {
                 await connection.query(
@@ -151,9 +164,8 @@ app.post('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
                 );
             }
         }
-
         await connection.commit();
-        res.json({ success: true, mensaje: 'Variantes actualizadas correctamente' });
+        res.json({ success: true });
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
@@ -165,12 +177,11 @@ app.post('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
 // --- VENTAS Y APARTADOS ---
 app.post('/api/ventas', verificarAcceso, async (req, res) => {
     const { producto_id, items, monto_pagado, fecha_venta } = req.body;
-    if (!items || items.length === 0) return res.status(400).json({ error: 'No hay tallas' });
+    if (!items || items.length === 0) return res.status(400).json({ error: 'No hay items' });
 
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-
         const [rows] = await connection.query('SELECT precio_compra, precio_venta, stock_actual FROM productos WHERE id = ?', [producto_id]);
         if (rows.length === 0) throw new Error('Producto no encontrado');
 
@@ -191,14 +202,8 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
             const cantLinea = parseInt(item.cantidad) || 0;
             const subtotalLinea = precioUnitario * cantLinea;
 
-            let anticipoLinea = 0;
-            if (anticipoRestante >= subtotalLinea) {
-                anticipoLinea = subtotalLinea;
-                anticipoRestante -= subtotalLinea;
-            } else {
-                anticipoLinea = anticipoRestante;
-                anticipoRestante = 0;
-            }
+            let anticipoLinea = anticipoRestante >= subtotalLinea ? subtotalLinea : anticipoRestante;
+            anticipoRestante = Math.max(0, anticipoRestante - subtotalLinea);
 
             const pendienteLinea = subtotalLinea - anticipoLinea;
             const gananciaLinea = (precioUnitario - costoUnitario) * cantLinea;
@@ -215,7 +220,7 @@ app.post('/api/ventas', verificarAcceso, async (req, res) => {
         }
 
         await connection.commit();
-        res.json({ mensaje: 'Venta registrada' });
+        res.json({ success: true, mensaje: 'Venta registrada' });
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
@@ -238,7 +243,6 @@ app.get('/api/ventas-historial', verificarAcceso, async (req, res) => {
 app.post('/api/ventas/:id/abonar', verificarAcceso, async (req, res) => {
     const ventaId = req.params.id;
     const { monto_abonado } = req.body;
-
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -265,7 +269,6 @@ app.post('/api/ventas/:id/abonar', verificarAcceso, async (req, res) => {
     }
 });
 
-// HISTORIAL POR SEMANAS Y DETALLE
 app.get('/api/corte-semanal', verificarAcceso, async (req, res) => {
     try {
         const [semanas] = await pool.query(`
@@ -297,9 +300,7 @@ app.get('/api/corte-semanal/detalle', verificarAcceso, async (req, res) => {
             ORDER BY v.fecha_venta DESC
         `, [inicio, fin]);
         res.json(rows);
-    } catch (err) { 
-        res.status(500).json({ error: err.message }); 
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/', (req, res) => {

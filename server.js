@@ -12,7 +12,7 @@ const app = express();
 
 // 1. Cabeceras de seguridad HTTP básicas
 app.use(helmet({
-    contentSecurityPolicy: false, // Permitir scripts externos como Tailwind y fuentes si es necesario
+    contentSecurityPolicy: false,
 }));
 
 app.use(express.json());
@@ -22,7 +22,7 @@ app.use(cors());
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     max: 10, // Máximo 10 intentos por IP
-    mensaje: { success: false, error: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.' }
+    message: { success: false, error: 'Demasiados intentos fallidos. Inténtalo de nuevo en 15 minutos.' }
 });
 
 const pool = mysql.createPool({
@@ -55,7 +55,6 @@ async function inicializarBD() {
     }
 }
 
-// Clave secreta robusta para JWT (usa variable de entorno obligatoria en producción)
 const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_super_segura_cambiar_en_produccion';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '12345';
 
@@ -68,11 +67,10 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Endpoint de Login con protección de frecuencia (Rate Limit) y JWT
+// Endpoint de Login con protección de frecuencia y JWT
 app.post('/api/login', loginLimiter, (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
-        // Generar un token válido por 24 horas
         const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
         res.json({ success: true, token });
     } else {
@@ -85,7 +83,6 @@ const verificarAcceso = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.status(403).json({ error: 'Token no proporcionado' });
 
-    // El formato esperado es "Bearer <token>" o directamente el token
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7, authHeader.length) : authHeader;
 
     jwt.verify(token, JWT_SECRET, (err, decoded) => {

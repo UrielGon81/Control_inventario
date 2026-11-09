@@ -52,8 +52,6 @@
 
         <!-- SECCIÓN INVENTARIO -->
         <div id="seccionInventario" class="space-y-8">
-            
-            <!-- FORMULARIO NUEVO / EDITAR -->
             <div class="bg-[#121216] border border-white/5 p-6 rounded-2xl space-y-4">
                 <div class="flex justify-between items-center">
                     <h2 id="tituloFormProducto" class="text-xs font-medium text-slate-400 uppercase tracking-wider">Nuevo Producto</h2>
@@ -63,8 +61,8 @@
                 <form id="productForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
                     <input type="hidden" id="editProductId">
                     <input type="text" id="nombre" placeholder="Nombre (ej. Sudadera Essentials)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
-                    <input type="text" id="talla" placeholder="Talla base (ej. M, G)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
-                    <input type="text" id="color" placeholder="Color (ej. Bone, Negro)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
+                    <input type="text" id="talla" placeholder="Tallas (ej. XS, S, M, G)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
+                    <input type="text" id="color" placeholder="Color base (ej. Bone, Negro)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
                     <input type="number" step="0.01" id="precio_compra" placeholder="Costo ($)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
                     <input type="number" step="0.01" id="precio_venta" placeholder="Venta ($)" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
                     <input type="number" id="stock_actual" placeholder="Stock Total" class="bg-[#0a0a0c] border border-white/10 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-white/30 text-white" required>
@@ -81,7 +79,7 @@
                             <tr class="border-b border-white/5 text-slate-500 font-medium uppercase tracking-wider bg-[#0a0a0c]/50">
                                 <th class="py-4 px-4">Imagen</th>
                                 <th class="py-4 px-4">Producto</th>
-                                <th class="py-4 px-4">Variante</th>
+                                <th class="py-4 px-4">Tallas</th>
                                 <th class="py-4 px-4">Costo</th>
                                 <th class="py-4 px-4">Venta</th>
                                 <th class="py-4 px-4 text-emerald-400">Ganancia U.</th>
@@ -140,7 +138,7 @@
 
     <!-- MODAL VENTA / APARTADO -->
     <div id="modalVenta" class="fixed inset-0 bg-[#0a0a0c]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4 hidden">
-        <div class="bg-[#121216] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-md w-full space-y-4">
+        <div class="bg-[#121216] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-lg w-full space-y-4">
             <div class="flex justify-between items-center border-b border-white/5 pb-3">
                 <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Registrar Transacción</h3>
                 <button onclick="cerrarModalVenta()" class="text-slate-400 hover:text-white">✕</button>
@@ -157,10 +155,10 @@
 
                 <div class="space-y-2">
                     <div class="flex justify-between items-center">
-                        <label class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Variantes (Color / Talla / Cantidad):</label>
-                        <button type="button" onclick="agregarLineaTalla()" class="text-[11px] text-white hover:underline">+ Añadir</button>
+                        <label class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Selecciona Color, Talla y Cantidad:</label>
+                        <button type="button" onclick="agregarLineaTallaVenta()" class="text-[11px] text-white hover:underline">+ Añadir línea</button>
                     </div>
-                    <div id="contenedorTallas" class="space-y-2 max-h-36 overflow-y-auto pr-1"></div>
+                    <div id="contenedorTallasVenta" class="space-y-2 max-h-40 overflow-y-auto pr-1"></div>
                 </div>
 
                 <div>
@@ -170,7 +168,7 @@
 
                 <div class="flex gap-3 pt-2">
                     <button type="button" onclick="cerrarModalVenta()" class="w-1/2 bg-white/5 hover:bg-white/10 text-slate-300 py-3 rounded-xl text-xs font-medium transition">Cancelar</button>
-                    <button type="submit" class="w-1/2 bg-white hover:bg-slate-200 text-black py-3 rounded-xl text-xs font-medium transition uppercase tracking-wider">Guardar</button>
+                    <button type="submit" class="w-1/2 bg-white hover:bg-slate-200 text-black py-3 rounded-xl text-xs font-medium transition uppercase tracking-wider">Guardar Venta</button>
                 </div>
             </form>
         </div>
@@ -198,12 +196,11 @@
                 </table>
             </div>
 
-            <!-- Formulario rápido para agregar/editar variante -->
             <div class="border-t border-white/5 pt-3 space-y-2">
                 <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Añadir o actualizar variante:</p>
                 <div class="flex gap-2">
-                    <input type="text" id="varColorInput" placeholder="Color" class="w-1/3 bg-[#0a0a0c] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs text-white outline-none">
-                    <input type="text" id="varTallaInput" placeholder="Talla (XS, M...)" class="w-1/3 bg-[#0a0a0c] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs text-white outline-none">
+                    <input type="text" id="varColorInput" placeholder="Color (ej. Negra)" class="w-1/3 bg-[#0a0a0c] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs text-white outline-none">
+                    <input type="text" id="varTallaInput" placeholder="Talla (XS, S...)" class="w-1/3 bg-[#0a0a0c] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs text-white outline-none">
                     <input type="number" id="varStockInput" placeholder="Stock" class="w-1/4 bg-[#0a0a0c] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs text-white outline-none">
                     <button onclick="guardarVarianteRapida()" class="bg-white text-black px-3 py-1.5 rounded-lg text-xs font-semibold">+</button>
                 </div>
@@ -243,6 +240,7 @@
     <script>
         const API_URL = '/api';
         let productoSeleccionadoId = null;
+        let variantesCacheModal = [];
 
         async function fetchAuth(ruta, opciones = {}) {
             const token = localStorage.getItem('token_admin');
@@ -326,7 +324,7 @@
                         <tr class="hover:bg-white/[0.02] transition">
                             <td class="py-3 px-4">${imgTag}</td>
                             <td class="py-3 px-4 font-medium text-white">${p.nombre}</td>
-                            <td class="py-3 px-4"><span class="bg-white/5 text-slate-300 text-[11px] px-2.5 py-1 rounded-md border border-white/10">${p.talla} / ${p.color}</span></td>
+                            <td class="py-3 px-4"><span class="bg-white/5 text-slate-300 text-[11px] px-2.5 py-1 rounded-md border border-white/10">${p.talla}</span></td>
                             <td class="py-3 px-4 text-slate-400">$${Number(p.precio_compra).toFixed(2)}</td>
                             <td class="py-3 px-4 font-medium text-white">$${Number(p.precio_venta).toFixed(2)}</td>
                             <td class="py-3 px-4 font-semibold text-emerald-400">+$${Number(p.ganancia_unitaria).toFixed(2)}</td>
@@ -334,7 +332,7 @@
                             <td class="py-3 px-4 text-right space-x-1">
                                 <button onclick="abrirModalVariantes(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition">Tallas</button>
                                 <button onclick="prepararEdicionProducto(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}', '${String(p.talla).replace(/'/g, "\\'")}', '${String(p.color).replace(/'/g, "\\'")}', ${p.precio_compra}, ${p.precio_venta}, ${p.stock_actual}, '${String(p.imagen || '')}')" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition">Editar</button>
-                                <button onclick="abrirModalVenta(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}', '${String(p.talla).replace(/'/g, "\\'")}', '${String(p.color).replace(/'/g, "\\'")}')" class="bg-white hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-medium transition">Vender</button>
+                                <button onclick="abrirModalVenta(${p.id}, '${String(p.nombre).replace(/'/g, "\\'")}')" class="bg-white hover:bg-slate-200 text-black px-3 py-1.5 rounded-lg font-medium transition">Vender</button>
                             </td>
                         </tr>`;
                 });
@@ -355,6 +353,7 @@
             try {
                 const res = await fetchAuth(`/productos/${productoId}/variantes`);
                 const variantes = await res.json();
+                variantesCacheModal = variantes;
                 tbody.innerHTML = '';
                 if (variantes.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="3" class="py-3 text-center text-slate-500">Sin variantes registradas.</td></tr>`;
@@ -375,14 +374,19 @@
             const color = document.getElementById('varColorInput').value.trim();
             const talla = document.getElementById('varTallaInput').value.trim();
             const stock = parseInt(document.getElementById('varStockInput').value);
-            if (!color || !talla || isNaN(stock)) return alert("Completa los campos de color, talla y stock");
+            if (!color || !talla || isNaN(stock)) return alert("Completa color, talla y stock");
 
             try {
-                // Obtenemos las variantes actuales para agregar la nueva
                 const resGet = await fetchAuth(`/productos/${productoSeleccionadoId}/variantes`);
                 const actuales = await resGet.json();
                 
-                actuales.push({ color, talla, stock });
+                // Buscar si ya existe la variante para actualizarla o agregarla
+                const index = actuales.findIndex(v => v.color.toLowerCase() === color.toLowerCase() && v.talla.toLowerCase() === talla.toLowerCase());
+                if (index >= 0) {
+                    actuales[index].stock = stock;
+                } else {
+                    actuales.push({ color, talla, stock });
+                }
 
                 const res = await fetchAuth(`/productos/${productoSeleccionadoId}/variantes`, {
                     method: 'POST',
@@ -459,11 +463,24 @@
             } catch (err) { console.error(err); }
         });
 
-        function abrirModalVenta(id, nombre, tallaBase, colorBase) {
+        async function abrirModalVenta(id, nombreProducto) {
             document.getElementById('modalProductoId').value = id;
-            document.getElementById('infoProductoModal').innerText = `Artículo: ${nombre}`;
-            document.getElementById('contenedorTallas').innerHTML = '';
-            agregarLineaTalla(tallaBase, colorBase, 1);
+            document.getElementById('infoProductoModal').innerText = `Artículo: ${nombreProducto}`;
+            document.getElementById('contenedorTallasVenta').innerHTML = '';
+
+            try {
+                const res = await fetchAuth(`/productos/${id}/variantes`);
+                const variantes = res.ok ? await res.json() : [];
+                variantesCacheModal = variantes;
+
+                if (variantes.length > 0) {
+                    agregarLineaTallaVenta(variantes[0].talla, variantes[0].color, 1);
+                } else {
+                    agregarLineaTallaVenta('Única', 'General', 1);
+                }
+            } catch (err) {
+                agregarLineaTallaVenta('Única', 'General', 1);
+            }
 
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -471,14 +488,19 @@
             document.getElementById('modalVenta').classList.remove('hidden');
         }
 
-        function agregarLineaTalla(tallaDefault = '', colorDefault = '', cantidadDefault = 1) {
-            const contenedor = document.getElementById('contenedorTallas');
+        function agregarLineaTallaVenta(tallaDefault = '', colorDefault = '', cantDefault = 1) {
+            const contenedor = document.getElementById('contenedorTallasVenta');
             const div = document.createElement('div');
             div.className = "flex gap-2 items-center";
+
+            // Crear selector de variantes si hay caché disponible
+            let opcionesColor = '<input type="text" placeholder="Color" value="'+colorDefault+'" class="input-color w-1/3 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>';
+            let opcionesTalla = '<input type="text" placeholder="Talla" value="'+tallaDefault+'" class="input-talla w-1/3 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>';
+
             div.innerHTML = `
-                <input type="text" placeholder="Talla" value="${tallaDefault}" class="input-talla w-1/3 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>
-                <input type="text" placeholder="Color" value="${colorDefault}" class="input-color w-1/3 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>
-                <input type="number" placeholder="Cant" min="1" value="${cantidadDefault}" class="input-cant w-1/4 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>
+                ${opcionesColor}
+                ${opcionesTalla}
+                <input type="number" placeholder="Cant" min="1" value="${cantDefault}" class="input-cant w-1/4 bg-[#0a0a0c] border border-white/10 px-3 py-2 rounded-xl text-xs text-white outline-none" required>
                 <button type="button" onclick="this.parentElement.remove()" class="text-rose-400 p-2 font-bold">✕</button>
             `;
             contenedor.appendChild(div);
@@ -488,13 +510,13 @@
 
         document.getElementById('formVentaModal').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const filasTallas = document.querySelectorAll('#contenedorTallas > div');
+            const filas = document.querySelectorAll('#contenedorTallasVenta > div');
             let itemsArray = [];
-            filasTallas.forEach(fila => {
-                const talla = fila.querySelector('.input-talla').value.trim();
+            filas.forEach(fila => {
                 const color = fila.querySelector('.input-color').value.trim();
+                const talla = fila.querySelector('.input-talla').value.trim();
                 const cantidad = parseInt(fila.querySelector('.input-cant').value);
-                if (talla && cantidad > 0) itemsArray.push({ talla, color, cantidad });
+                if (talla && cantidad > 0) itemsArray.push({ color, talla, cantidad });
             });
 
             if (itemsArray.length === 0) return alert("Agrega al menos una variante");
@@ -507,12 +529,20 @@
             };
 
             try {
-                const res = await fetchAuth('/ventas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                const res = await fetchAuth('/ventas', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(data) 
+                });
+                const resultado = await res.json();
                 if (res.ok) {
                     cerrarModalVenta();
                     document.getElementById('modalPagado').value = '';
                     cargarProductos();
-                } else { alert("Error al registrar la transacción"); }
+                    alert("¡Venta registrada y stock actualizado con éxito!");
+                } else { 
+                    alert("Error: " + (resultado.error || "No se pudo registrar la venta")); 
+                }
             } catch (err) { console.error(err); }
         });
 

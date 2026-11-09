@@ -85,7 +85,7 @@ const verificarAcceso = (req, res, next) => {
     });
 };
 
-// --- PRODUCTOS (Blindado contra campos vacíos o nulos) ---
+// --- PRODUCTOS ---
 app.get('/api/productos', verificarAcceso, async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT p.*, (p.precio_venta - p.precio_compra) AS ganancia_unitaria FROM productos p');
@@ -96,8 +96,6 @@ app.get('/api/productos', verificarAcceso, async (req, res) => {
 app.post('/api/productos', verificarAcceso, async (req, res) => {
     try {
         let { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
-        
-        // Valores por defecto seguros para evitar errores de base de datos
         nombre = nombre ? nombre.trim() : 'Sin nombre';
         precio_compra = parseFloat(precio_compra) || 0;
         precio_venta = parseFloat(precio_venta) || 0;
@@ -112,7 +110,6 @@ app.post('/api/productos', verificarAcceso, async (req, res) => {
         );
         res.json({ id: result.insertId, success: true });
     } catch (err) { 
-        console.error("Error en POST /api/productos:", err.message);
         res.status(500).json({ error: err.message }); 
     }
 });
@@ -121,7 +118,6 @@ app.put('/api/productos/:id', verificarAcceso, async (req, res) => {
     try {
         const { id } = req.params;
         let { nombre, precio_compra, precio_venta, stock_actual, talla, color, imagen } = req.body;
-        
         nombre = nombre ? nombre.trim() : 'Sin nombre';
         precio_compra = parseFloat(precio_compra) || 0;
         precio_venta = parseFloat(precio_venta) || 0;
@@ -136,7 +132,6 @@ app.put('/api/productos/:id', verificarAcceso, async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) { 
-        console.error("Error en PUT /api/productos/:id:", err.message);
         res.status(500).json({ error: err.message }); 
     }
 });
@@ -174,53 +169,87 @@ app.post('/api/productos/:id/variantes', verificarAcceso, async (req, res) => {
     }
 });
 
-// --- VENTAS Y APARTADOS ---
+// --- VENTAS Y APARTADOS (Actualización dinámica de variantes y stock general) ---
 app.post('/api/ventas', verificarAcceso, async (req, res) => {
     const { producto_id, items, monto_pagado, fecha_venta } = req.body;
-    if (!items || items.length === 0) return res.status(400).json({ error: 'No hay items' });
+    if (!items || items.length === 0) return res.status(400).json({ error: 'No hay variantes seleccionadas' });
 
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
+
         const [rows] = await connection.query('SELECT precio_compra, precio_venta, stock_actual FROM productos WHERE id = ?', [producto_id]);
         if (rows.length === 0) throw new Error('Producto no encontrado');
 
         const prod = rows[0];
         const precioUnitario = parseFloat(prod.precio_venta) || 0;
         const costoUnitario = parseFloat(prod.precio_compra) || 0;
-        const stockActual = parseInt(prod.stock_actual) || 0;
 
-        const totalPiezas = items.reduce((sum, item) => sum + (parseInt(item.cantidad) || 0), 0);
-        if (stockActual < totalPiezas) throw new Error('Stock insuficiente');
-
+        let totalPiezasVendidas = 0;
         let fechaMysql = fecha_venta ? fecha_venta.replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' ');
         if (fechaMysql.length === 16) fechaMysql += ':00';
 
         let anticipoRestante = parseFloat(monto_pagado) || 0;
 
+        // 1. Validar existencia y stock suficiente en cada variante específica
         for (const item of items) {
             const cantLinea = parseInt(item.cantidad) || 0;
+            if (cantLinea <= 0) continue;
+            totalPiezasVendidas += cantLinea;
+
+            const tallaItem = item.talla ? item.talla.trim() : 'Única';
+            const colorItem = item.color ? item.color.trim() : 'General';
+
+            const [varRows] = await connection.query(
+                'SELECT id, stock FROM variantes_productos WHERE producto_id = ? AND color = ? AND talla = ?',
+                [producto_id, colorItem, tallaItem]
+            );
+
+            if (varRows.length === 0) {
+                throw new Error(`La variante (Color: ${colorItem}, Talla: ${tallaItem}) no existe registrada en el inventario.`);
+            }
+
+            if (varRows[0].stock < cantLinea) {
+                throw new Error(`Stock insuficiente para ${colorItem} - Talla ${tallaItem}. Disponible: ${varRows[0].stock} pzas.`);
+            }
+        }
+
+        // 2. Registrar ventas y descontar tanto de la variante como del stock global
+        let anticipoRestanteLinea = anticipoRestante;
+
+        for (const item of items) {
+            const cantLinea = parseInt(item.cantidad) || 0;
+            if (cantLinea <= 0) continue;
             const subtotalLinea = precioUnitario * cantLinea;
 
-            let anticipoLinea = anticipoRestante >= subtotalLinea ? subtotalLinea : anticipoRestante;
-            anticipoRestante = Math.max(0, anticipoRestante - subtotalLinea);
+            let anticipoLinea = anticipoRestanteLinea >= subtotalLinea ? subtotalLinea : anticipoRestanteLinea;
+            anticipoRestanteLinea = Math.max(0, anticipoRestanteLinea - subtotalLinea);
 
             const pendienteLinea = subtotalLinea - anticipoLinea;
             const gananciaLinea = (precioUnitario - costoUnitario) * cantLinea;
             const estadoLinea = pendienteLinea <= 0 ? 'Liquidado' : 'Pendiente de Liquidación';
-            const detalleTallaColor = `${item.talla || 'Única'} / ${item.color || 'General'}`;
+            const detalleTallaColor = `${item.talla.trim()} / ${item.color.trim()}`;
 
+            // Insertar en historial de ventas
             await connection.query(
                 `INSERT INTO ventas_diarias
                 (producto_id, cantidad_vendida, talla_vendida, precio_total_venta, monto_pagado, monto_pendiente, ganancia_neta_total, fecha_venta, estado_pago)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [producto_id, cantLinea, detalleTallaColor, subtotalLinea, anticipoLinea, pendienteLinea, gananciaLinea, fechaMysql, estadoLinea]
             );
-            await connection.query('UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?', [cantLinea, producto_id]);
+
+            // Descontar stock de la variante específica
+            await connection.query(
+                'UPDATE variantes_productos SET stock = stock - ? WHERE producto_id = ? AND color = ? AND talla = ?',
+                [cantLinea, producto_id, item.color.trim(), item.talla.trim()]
+            );
         }
 
+        // Descontar stock general del producto
+        await connection.query('UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?', [totalPiezasVendidas, producto_id]);
+
         await connection.commit();
-        res.json({ success: true, mensaje: 'Venta registrada' });
+        res.json({ success: true, mensaje: 'Venta registrada y stock actualizado correctamente' });
     } catch (err) {
         await connection.rollback();
         res.status(500).json({ error: err.message });
